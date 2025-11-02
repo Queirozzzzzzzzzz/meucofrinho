@@ -6,23 +6,31 @@ const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
 const API_URL = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
 
-const client = new Client({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // for Vercel Postgres
-});
+let client;
 
-await client.connect();
-await client.query(`
-  CREATE TABLE IF NOT EXISTS transactions (
-    id SERIAL PRIMARY KEY,
-    type VARCHAR(10) NOT NULL,
-    amount NUMERIC NOT NULL,
-    category VARCHAR(50),
-    date TIMESTAMP DEFAULT NOW()
-  )
-`);
+async function initDb() {
+  if (!client) {
+    client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    });
+    await client.connect();
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        type VARCHAR(10) NOT NULL,
+        amount NUMERIC NOT NULL,
+        category VARCHAR(50),
+        date TIMESTAMP DEFAULT NOW()
+      )
+    `);
+  }
+  return client;
+}
 
 export default async function handler(req, res) {
+  const client = await initDb();
+
   if (req.method === "GET") {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
@@ -47,11 +55,9 @@ export default async function handler(req, res) {
         const type = text.startsWith("+") ? "income" : "expense";
         const parts = text.substring(1).split(" ");
         const amount = parseFloat(parts[0]);
-        const description = parts.slice(1).join(" ");
+        const category = parts.slice(1).join(" ").substring(0, 50);
 
         if (!isNaN(amount)) {
-          const category = parts.slice(1).join(" ").substring(0, 50);
-
           await client.query(
             "INSERT INTO transactions (type, amount, category, date) VALUES ($1, $2, $3, $4)",
             [type, amount, category, now]
@@ -60,7 +66,7 @@ export default async function handler(req, res) {
           await sendMessage(
             from,
             `${type === "income" ? "💰 Entrada" : "💸 Saída"} registrada: ${amount.toFixed(2)} (${category})` +
-            (category.length === 50 ? " ⚠️ Categoria truncada para 50 caracteres." : "")
+              (category.length === 50 ? " ⚠️ Categoria truncada para 50 caracteres." : "")
           );
         }
       } else if (text.startsWith("status")) {
@@ -73,13 +79,21 @@ export default async function handler(req, res) {
           [limit]
         );
 
-        const incomes = rows.filter(r => r.type === "income").reduce((t, r) => t + parseFloat(r.amount), 0);
-        const expenses = rows.filter(r => r.type === "expense").reduce((t, r) => t + parseFloat(r.amount), 0);
+        const incomes = rows
+          .filter((r) => r.type === "income")
+          .reduce((t, r) => t + parseFloat(r.amount), 0);
+        const expenses = rows
+          .filter((r) => r.type === "expense")
+          .reduce((t, r) => t + parseFloat(r.amount), 0);
         const balance = incomes - expenses;
 
         await sendMessage(
           from,
-          `📊 Estatísticas (${days} dias):\nEntradas: R$${incomes.toFixed(2)}\nSaídas: R$${expenses.toFixed(2)}\nSaldo: ${balance >= 0 ? "💚" : "❤️"} R$${balance.toFixed(2)}`
+          `📊 Estatísticas (${days} dias):\nEntradas: R$${incomes.toFixed(
+            2
+          )}\nSaídas: R$${expenses.toFixed(2)}\nSaldo: ${
+            balance >= 0 ? "💚" : "❤️"
+          } R$${balance.toFixed(2)}`
         );
       } else {
         await sendMessage(
@@ -88,6 +102,7 @@ export default async function handler(req, res) {
         );
       }
     }
+
     return res.sendStatus(200);
   }
 
