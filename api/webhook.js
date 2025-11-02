@@ -4,7 +4,7 @@ import { Client } from "pg";
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
-const API_URL = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
+const API_URL = `https://graph.facebook.com/v24.0/${PHONE_ID}/messages`;
 
 let client;
 
