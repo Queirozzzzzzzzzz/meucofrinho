@@ -31,19 +31,28 @@ async function initDb() {
 
 // send WhatsApp message
 async function sendMessage(to, text) {
-  await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body: text },
-    }),
-  });
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "text",
+        text: { body: text },
+      }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      console.error("sendMessage error:", errorData);
+    }
+  } catch (err) {
+    console.error("Network or fetch error:", err);
+  }
 }
 
 export default async function handler(req, res) {
