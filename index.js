@@ -1,13 +1,16 @@
 import express from "express";
 import axios from "axios";
 import fs from "fs";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
 
-const VERIFY_TOKEN = "f734gnvt43tgnv43uy";
-const ACCESS_TOKEN = "EAAQl0GrLxU4BPwcLPuF1gaAsbov8cWSDRZCy0oRNqSvwZAMHWDywPZCzOmWLKhU7H9wu5XvvjY1PZChR73CoT3IoAs2PdUhACVInEPa02tpHmRym8xe9XfFNsEXAPxVAhGYgF8xpAZBwI0NkB6hPtxGnZA6YRtc5xUKBxoplDuqRAIoojTzLXdKlKo1hWxYEEjJfeC8Fl4SISGd9lPJMNNRQaAuCBmZCB1rketCAc7RFcvoZCDXgSXdHoX13zTYkTvfB4If7j0eng34zgO2kesAp";
-const PHONE_ID = "851160178082922";
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const PHONE_ID = process.env.PHONE_ID;
 const API_URL = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
 
 const DATA_FILE = "piggybank.json";
