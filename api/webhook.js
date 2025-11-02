@@ -6,7 +6,7 @@ const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
 const API_URL = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
 
-let client; // will hold the Postgres client
+let client;
 
 // Lazy DB init (serverless-safe)
 async function initDb() {
@@ -46,14 +46,21 @@ async function sendMessage(to, text) {
       }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
+    console.log(
+      "WhatsApp API response:",
+      data,
+      "Status:",
+      res.status,
+      res.statusText
+    );
 
     if (!res.ok) {
       console.error("sendMessage error:", data);
-      return false; // message not sent
+      return false;
     }
 
-    return true; // message sent successfully
+    return true;
   } catch (err) {
     console.error("Network or fetch error:", err);
     return false;
