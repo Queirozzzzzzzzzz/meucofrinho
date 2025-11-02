@@ -1,13 +1,14 @@
+// /api/webhook.js
 import { Client } from "pg";
-import axios from "axios";
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
 const API_URL = `https://graph.facebook.com/v21.0/${PHONE_ID}/messages`;
 
-let client;
+let client; // will hold the Postgres client
 
+// Lazy DB init (serverless-safe)
 async function initDb() {
   if (!client) {
     client = new Client({
@@ -28,19 +29,40 @@ async function initDb() {
   return client;
 }
 
-export default async function handler(req, res) {
-  const client = await initDb();
+// send WhatsApp message
+async function sendMessage(to, text) {
+  await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body: message },
+    }),
+  });
+}
 
+export default async function handler(req, res) {
+  const db = await initDb();
+
+  // VERIFY webhook
   if (req.method === "GET") {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
+
     if (mode && token && mode === "subscribe" && token === VERIFY_TOKEN) {
       return res.status(200).send(challenge);
     }
-    return res.sendStatus(403);
+
+    return res.status(403).end();
   }
 
+  // HANDLE incoming WhatsApp messages
   if (req.method === "POST") {
     const entry = req.body.entry?.[0];
     const changes = entry?.changes?.[0];
@@ -58,15 +80,19 @@ export default async function handler(req, res) {
         const category = parts.slice(1).join(" ").substring(0, 50);
 
         if (!isNaN(amount)) {
-          await client.query(
+          await db.query(
             "INSERT INTO transactions (type, amount, category, date) VALUES ($1, $2, $3, $4)",
             [type, amount, category, now]
           );
 
           await sendMessage(
             from,
-            `${type === "income" ? "💰 Entrada" : "💸 Saída"} registrada: ${amount.toFixed(2)} (${category})` +
-              (category.length === 50 ? " ⚠️ Categoria truncada para 50 caracteres." : "")
+            `${
+              type === "income" ? "💰 Entrada" : "💸 Saída"
+            } registrada: ${amount.toFixed(2)} (${category})` +
+              (category.length === 50
+                ? " ⚠️ Categoria truncada para 50 caracteres."
+                : "")
           );
         }
       } else if (text.startsWith("status")) {
@@ -74,7 +100,7 @@ export default async function handler(req, res) {
         const limit = new Date();
         limit.setDate(limit.getDate() - days);
 
-        const { rows } = await client.query(
+        const { rows } = await db.query(
           "SELECT type, amount FROM transactions WHERE date >= $1",
           [limit]
         );
@@ -103,21 +129,9 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
 
-  return res.sendStatus(405);
-}
-
-async function sendMessage(to, text) {
-  await axios.post(
-    API_URL,
-    {
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body: text },
-    },
-    { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } }
-  );
+  // unsupported method
+  return res.status(405).end();
 }
