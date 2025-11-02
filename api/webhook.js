@@ -46,12 +46,17 @@ async function sendMessage(to, text) {
       }),
     });
 
+    const data = await res.json();
+
     if (!res.ok) {
-      const errorData = await res.json();
-      console.error("sendMessage error:", errorData);
+      console.error("sendMessage error:", data);
+      return false; // message not sent
     }
+
+    return true; // message sent successfully
   } catch (err) {
     console.error("Network or fetch error:", err);
+    return false;
   }
 }
 
@@ -89,20 +94,23 @@ export default async function handler(req, res) {
         const category = parts.slice(1).join(" ").substring(0, 50);
 
         if (!isNaN(amount)) {
-          await db.query(
-            "INSERT INTO transactions (type, amount, category, date) VALUES ($1, $2, $3, $4)",
-            [type, amount, category, now]
-          );
+          const typeText = type === "income" ? "💰 Entrada" : "💸 Saída";
+          const msg =
+            `${typeText} registrada: ${amount.toFixed(2)} (${category})` +
+            (category.length === 50
+              ? " ⚠️ Categoria truncada para 50 caracteres."
+              : "");
 
-          await sendMessage(
-            from,
-            `${
-              type === "income" ? "💰 Entrada" : "💸 Saída"
-            } registrada: ${amount.toFixed(2)} (${category})` +
-              (category.length === 50
-                ? " ⚠️ Categoria truncada para 50 caracteres."
-                : "")
-          );
+          const sent = await sendMessage(from, msg);
+
+          if (sent) {
+            await db.query(
+              "INSERT INTO transactions (type, amount, category, date) VALUES ($1, $2, $3, $4)",
+              [type, amount, category, now]
+            );
+          } else {
+            console.error("Transaction not saved because message failed");
+          }
         }
       } else if (text.startsWith("status")) {
         const days = parseInt(text.split(" ")[1]) || 30;
